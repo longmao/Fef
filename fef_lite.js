@@ -31,7 +31,8 @@
 }(function(root, Fef, _, $) {
     Fef.$ = $;
     Fef.VERSION = "V0.1";
-    var instances= []
+    var instances= [],
+        globalConfig = {}
     /**
      * Creates a new version of a function whose this-value is bound to a specific
      * object.
@@ -47,12 +48,29 @@
         };
     }
 
+    /**
+     * Signals that an error has occurred. If in development mode, an error
+     * is thrown. If in production mode, an event is fired.
+     * @param {Error} [exception] The exception object to use.
+     * @returns {void}
+     * @private
+     */
+    function error(exception) {
+
+        if (globalConfig.debug) {
+            throw exception;
+        } else {
+            $.noop();
+        }
+    }
+
     // Fef.View are almost more convention than they are actual code.
 
     // Creating a Fef.View creates its initial element outside of the DOM,
     // if an existing element is not provided...
     var View = Fef.View = function(options) {
         this.cid = _.uniqueId('view');
+        globalConfig = _.pick(options || {}, configOptions)
         _.extend(this, _.pick(options || {}, viewOptions));
         this._ensureElement();
         _.extend(this,this.setViewAttr && this.setViewAttr() || {});
@@ -69,6 +87,7 @@
 
     // List of view options to be merged as properties.
     var viewOptions = ['model', 'collection', 'el', 'id', 'attributes', 'className', 'tagName', 'events'];
+    var configOptions = ["debug"]
 
     // Set up all inheritable **Fef.View** properties and methods.
     _.extend(View.prototype, {
@@ -213,7 +232,7 @@
     });
 
 
-    var Context = Fef.context = {}
+    var Context = Fef.Context = {}
     //a idea form t3 framework(http://t3js.org/),handle the communication between multiple views.
     _.extend(Context, {
         _handlers:{},
@@ -277,7 +296,15 @@
                     j,
                     id,
                     instanceData,
-                    messageHandlers;
+                    messageHandlers,
+                    processMessageHandler= function(_name){
+                        if (_.indexOf(instanceData.messages || [], _name) !== -1) {
+                            messageHandlers.push(bind(instanceData.onmessage, instanceData));
+                        }
+                        for (i = 0; i < messageHandlers.length; i++) {
+                            messageHandlers[i](_name, data);
+                        }
+                     };
 
                 for (j = 0; j < instances.length; j++) {
                     var instance = instances[j]
@@ -286,14 +313,14 @@
                         instanceData = instance["view"];
 
                         // Module message handler is called first
-                        if (_.indexOf(instanceData.messages || [], name) !== -1) {
-                            messageHandlers.push(bind(instanceData.onmessage, instanceData));
+                        if(_.isArray(name)){
+                            _.each(name,function(_each){
+                                processMessageHandler(_each)
+                            })
+                        }else{
+                            processMessageHandler(name)
                         }
 
-
-                        for (i = 0; i < messageHandlers.length; i++) {
-                            messageHandlers[i](name, data);
-                        }
                     }
 
                 }
@@ -313,7 +340,7 @@
         add:function(serviceName,creator, options){
             
             if (typeof this.services[serviceName] !== 'undefined') {
-                console.error(new Error('Service ' + serviceName + ' has already been added.'));
+                error(new Error('Service ' + serviceName + ' has already been added.'));
                 return;
             }
             options = options || {};
@@ -340,7 +367,14 @@
             return null;
         },
         setAttribute:function(name, value){
-            this[name] = value;
+            var that = this;
+            if(typeof name === "object"){
+                _.map(name,function(value, key){
+                  that[key] = value;  
+                })
+            }else{
+                that[name] = value;
+            }
         },
         getAttribute:function(name){
             return this[name]
