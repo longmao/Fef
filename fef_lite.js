@@ -111,10 +111,13 @@
         render: function() {
             return this;
         },
-
-        //
         renderPartial:function (selector,html){
-            this.$el.find(selector).html(html);
+            if(selector instanceof $){
+                var $this = selector;
+                $this.html(html)
+            }else if(typeof selector == "string"){ 
+                this.$el.find(selector).html(html);
+            }
         },
         renderView:function(html){
             this.$el.html(html);
@@ -332,9 +335,9 @@
     })
 
 
-    var service = Fef.Service = {}
+    var Service = Fef.Service = {}
 
-    _.extend(service, {
+    _.extend(Service, {
         services:{},
         //Registers a new service
         add:function(serviceName,creator, options){
@@ -380,6 +383,30 @@
             return this[name]
         }
     })
+
+
+    var Sync = Fef.Sync = function(options) {
+        this.cid = _.uniqueId('Sync');
+        this.initialize.apply(this, arguments);
+    };
+
+    _.extend(Sync.prototype, {
+        fetchHandler:function(api_url,params){
+            //dependece on api.js
+            api_url.set(params.query);
+            api_url.load({
+                beforeSend:function(){
+                    params.beforeSend && params.beforeSend()
+                },
+                success: function(msg, data) {
+                    params.callback && params.callback(data)
+                },
+                ajaxComplete:function() {
+                    params.ajaxComplete && params.ajaxComplete()
+                }
+            })
+        }
+    })
     // Helpers
     // -------
 
@@ -422,8 +449,8 @@
 
         return child;
     };
-    // Set up inheritance for the model, collection, router, view and history.
-    View.extend = extend;
+    // Set up inheritance for the view and sync.
+    View.extend = Sync.extend =  extend;
     return Fef;
 
 }))
